@@ -1,10 +1,16 @@
+import os
 import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
 
-OTP_EXPIRY_SECONDS = 300
-MAX_ATTEMPTS = 5
+
+load_dotenv()
+
+OTP_EXPIRY_SECONDS = int(os.getenv("OTP_EXPIRY_SECONDS", "300"))
+MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "5"))
+
 LOG_FILE = Path(__file__).parent.parent / "logs" / "auth.log"
 
 
