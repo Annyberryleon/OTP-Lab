@@ -23,6 +23,13 @@ def home():
     return "OTP Lab is running!"
 
 
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "healthy"
+    })
+
+
 @app.route("/otp/generate")
 @limiter.limit("5 per minute")
 def generate():
