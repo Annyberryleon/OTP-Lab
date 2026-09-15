@@ -1,7 +1,17 @@
 from flask import Flask, jsonify, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 from otp import generate_otp, get_expiry_time, verify_otp
 
+
 app = Flask(__name__)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[]
+)
 
 stored_otp = None
 otp_expiry = None
@@ -14,6 +24,7 @@ def home():
 
 
 @app.route("/otp/generate")
+@limiter.limit("5 per minute")
 def generate():
     global stored_otp, otp_expiry, failed_attempts
 
@@ -28,6 +39,7 @@ def generate():
 
 
 @app.route("/otp/verify", methods=["POST"])
+@limiter.limit("5 per minute")
 def verify():
     global stored_otp, otp_expiry, failed_attempts
 
