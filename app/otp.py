@@ -13,12 +13,10 @@ MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "5"))
 
 LOG_FILE = Path(__file__).parent.parent / "logs" / "auth.log"
 
-
-def log_event(event):
+def log_event(event, level="INFO"):
     timestamp = datetime.now().isoformat()
     with LOG_FILE.open("a", encoding="utf-8") as log:
-        log.write(f"{timestamp} - {event}\n")
-
+        log.write(f"{timestamp} - {level} - {event}\n")
 
 def generate_otp():
     otp = f"{secrets.randbelow(1_000_000):06d}"
