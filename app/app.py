@@ -1,17 +1,47 @@
 from flask import Flask, jsonify, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter
 
 from otp import generate_otp, get_expiry_time, verify_otp
 
 
 app = Flask(__name__)
 
+metrics = PrometheusMetrics(app, path="/metrics")
+
+otp_generated_total = Counter(
+    "otp_generated_total",
+    "Total number of OTPs generated"
+)
+
+otp_verification_success_total = Counter(
+    "otp_verification_success_total",
+    "Total number of successful OTP verifications"
+)
+
+otp_verification_failed_total = Counter(
+    "otp_verification_failed_total",
+    "Total number of failed OTP verifications"
+)
+
+otp_expired_total = Counter(
+    "otp_expired_total",
+    "Total number of expired OTP verification attempts"
+)
+
+otp_blocked_total = Counter(
+    "otp_blocked_total",
+    "Total number of OTP verification attempts blocked due to too many failed attempts"
+)
+
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
     default_limits=[]
 )
+
 
 stored_otp = None
 otp_expiry = None
@@ -38,6 +68,8 @@ def generate():
     stored_otp = generate_otp()
     otp_expiry = get_expiry_time()
     failed_attempts = 0
+
+    otp_generated_total.inc()
 
     return jsonify({
         "otp": stored_otp,
@@ -72,6 +104,8 @@ def verify():
     )
 
     if success:
+        otp_verification_success_total.inc()
+
         stored_otp = None
         otp_expiry = None
         failed_attempts = 0
@@ -80,6 +114,14 @@ def verify():
             "success": True,
             "message": message
         })
+
+    otp_verification_failed_total.inc()
+
+    if message == "OTP has expired":
+        otp_expired_total.inc()
+
+    if message == "Too many failed attempts":
+        otp_blocked_total.inc()
 
     return jsonify({
         "success": False,
