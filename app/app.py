@@ -3,12 +3,17 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Counter
-
+import os
+import redis
 from otp import generate_otp, get_expiry_time, verify_otp
 
 
 app = Flask(__name__)
-
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=6379,
+    decode_responses=True
+)
 metrics = PrometheusMetrics(app, path="/metrics")
 
 otp_generated_total = Counter(
@@ -39,10 +44,9 @@ otp_blocked_total = Counter(
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
+    storage_uri=f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379",
     default_limits=[]
 )
-
-
 stored_otp = None
 otp_expiry = None
 failed_attempts = 0
