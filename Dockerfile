@@ -10,6 +10,8 @@ COPY app ./app
 COPY .env.example .env.example
 COPY logs ./logs
 
+ENV PYTHONPATH=/app/app
+
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"
