@@ -1,19 +1,23 @@
+import os
+import redis
+from datetime import datetime
+
 from flask import Flask, jsonify, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Counter
-import os
-import redis
+
 from otp import generate_otp, get_expiry_time, verify_otp
 
-
 app = Flask(__name__)
+
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=6379,
     decode_responses=True
 )
+
 metrics = PrometheusMetrics(app, path="/metrics")
 
 otp_generated_total = Counter(
@@ -47,9 +51,8 @@ limiter = Limiter(
     storage_uri=f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379",
     default_limits=[]
 )
-stored_otp = None
-otp_expiry = None
-failed_attempts = 0
+
+OTP_KEY = "otp:current"
 
 
 @app.route("/")
@@ -67,16 +70,24 @@ def health():
 @app.route("/otp/generate")
 @limiter.limit("5 per minute")
 def generate():
-    global stored_otp, otp_expiry, failed_attempts
-
-    stored_otp = generate_otp()
+    otp = generate_otp()
     otp_expiry = get_expiry_time()
-    failed_attempts = 0
+
+    redis_client.hset(
+        OTP_KEY,
+        mapping={
+            "otp": otp,
+            "expires_at": otp_expiry.isoformat(),
+            "failed_attempts": 0
+        }
+    )
+
+    redis_client.expire(OTP_KEY, int(os.getenv("OTP_EXPIRY_SECONDS", "300")))
 
     otp_generated_total.inc()
 
     return jsonify({
-        "otp": stored_otp,
+        "otp": otp,
         "expires_at": otp_expiry.isoformat()
     })
 
@@ -84,8 +95,6 @@ def generate():
 @app.route("/otp/verify", methods=["POST"])
 @limiter.limit("5 per minute")
 def verify():
-    global stored_otp, otp_expiry, failed_attempts
-
     data = request.get_json()
 
     if not data or "otp" not in data:
@@ -94,11 +103,17 @@ def verify():
             "message": "OTP is required"
         }), 400
 
-    if stored_otp is None or otp_expiry is None:
+    otp_data = redis_client.hgetall(OTP_KEY)
+
+    if not otp_data:
         return jsonify({
             "success": False,
             "message": "No OTP has been generated"
         }), 400
+
+    stored_otp = otp_data["otp"]
+    otp_expiry = datetime.fromisoformat(otp_data["expires_at"])
+    failed_attempts = int(otp_data.get("failed_attempts", 0))
 
     success, message, failed_attempts = verify_otp(
         data["otp"],
@@ -110,9 +125,7 @@ def verify():
     if success:
         otp_verification_success_total.inc()
 
-        stored_otp = None
-        otp_expiry = None
-        failed_attempts = 0
+        redis_client.delete(OTP_KEY)
 
         return jsonify({
             "success": True,
@@ -126,6 +139,13 @@ def verify():
 
     if message == "Too many failed attempts":
         otp_blocked_total.inc()
+
+    if message == "Invalid OTP":
+        redis_client.hset(
+            OTP_KEY,
+            "failed_attempts",
+            failed_attempts
+        )
 
     return jsonify({
         "success": False,
