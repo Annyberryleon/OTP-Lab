@@ -9,7 +9,8 @@ services:
       OTP_EXPIRY_SECONDS: ${OTP_EXPIRY_SECONDS}
       MAX_ATTEMPTS: ${MAX_ATTEMPTS}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
@@ -18,6 +19,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   prometheus:
     image: prom/prometheus
