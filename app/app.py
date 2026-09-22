@@ -11,12 +11,15 @@ from prometheus_client import Counter
 from otp import generate_otp, get_expiry_time, verify_otp
 
 app = Flask(__name__)
+
+
 @app.after_request
 def add_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
 
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
@@ -88,7 +91,10 @@ def generate():
         }
     )
 
-    redis_client.expire(OTP_KEY, int(os.getenv("OTP_EXPIRY_SECONDS", "300")))
+    redis_client.expire(
+        OTP_KEY,
+        int(os.getenv("OTP_EXPIRY_SECONDS", "300"))
+    )
 
     otp_generated_total.inc()
 
@@ -109,6 +115,14 @@ def verify():
             "message": "OTP is required"
         }), 400
 
+    submitted_otp = str(data["otp"])
+
+    if not submitted_otp.isdigit() or len(submitted_otp) != 6:
+        return jsonify({
+            "success": False,
+            "message": "OTP must be exactly 6 digits"
+        }), 400
+
     otp_data = redis_client.hgetall(OTP_KEY)
 
     if not otp_data:
@@ -122,7 +136,7 @@ def verify():
     failed_attempts = int(otp_data.get("failed_attempts", 0))
 
     success, message, failed_attempts = verify_otp(
-        data["otp"],
+        submitted_otp,
         stored_otp,
         otp_expiry,
         failed_attempts
@@ -161,4 +175,8 @@ def verify():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
