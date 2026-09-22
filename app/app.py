@@ -11,6 +11,12 @@ from prometheus_client import Counter
 from otp import generate_otp, get_expiry_time, verify_otp
 
 app = Flask(__name__)
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
